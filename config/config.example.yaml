@@ -86,6 +86,30 @@ go2rtc:
     username: ""
     password: ""
 
+# Optional ONVIF device/media facade for NVRs such as UniFi Protect.
+# It advertises the existing go2rtc RTSP stream; it does not start another
+# camera capture or encoder. Automatic discovery uses WS-Discovery multicast
+# on UDP 3702, so the Pi and NVR normally need to be on the same subnet.
+onvif:
+  enabled: false
+
+  # SOAP endpoint. This must be LAN-reachable when ONVIF is enabled.
+  listen: 0.0.0.0:8080
+
+  # Host/IP advertised to clients. Empty selects the primary LAN IPv4
+  # address. Set this explicitly on multi-homed devices or when routing makes
+  # automatic selection ambiguous. Do not include a port.
+  advertise_host: ""
+
+  # ONVIF WS-Security credentials. When enabled, set go2rtc.auth above to the
+  # same pair and expose go2rtc.rtsp_listen on the LAN (for example
+  # 0.0.0.0:8554). The HTTP/WebRTC listeners can remain on loopback.
+  username: ""
+  password: ""
+
+  manufacturer: MakerEye Labs
+  model: MakerEye
+
 # Direct Prusa Connect snapshot uploads: MakerEye periodically pulls a
 # JPEG from go2rtc's own snapshot endpoint and PUTs it to Prusa Connect.
 prusa_connect:

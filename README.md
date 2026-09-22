@@ -24,6 +24,9 @@ for exactly what has and hasn't been validated.
   pipeline via `rpicam-vid` and exposes it through
   [go2rtc](https://github.com/AlexxIT/go2rtc): RTSP, WebRTC, MJPEG, and
   JPEG snapshots. Optional username/password auth on those endpoints.
+- Optional ONVIF device/media services and WS-Discovery, allowing an NVR
+  such as UniFi Protect to discover the appliance and consume its existing
+  RTSP stream. No additional capture or encode pipeline is created.
 - Periodic snapshot uploads to Prusa Connect, pulled from the same
   go2rtc pipeline.
 - Optional MQTT + Home Assistant integration: the device and its
@@ -124,9 +127,8 @@ sudo ./scripts/uninstall.sh --purge    # also removes config, state, and the mak
 
 Default path: `/etc/makereye/config.yaml` (override with `-config` on any
 `makereye` subcommand). See `config/config.example.yaml` for a fully
-commented example covering `device`, `camera`, `stream`, `go2rtc`,
-`prusa_connect`, and `system`. Sections for future milestones (`mqtt`,
-`timelapse`, `prusalink`, `motion`, `ai`) are accepted but have no runtime
+commented example covering all implemented subsystems. Sections for future
+milestones (`prusalink`, `motion`, `ai`) are accepted but have no runtime
 effect yet.
 
 ```sh
@@ -222,6 +224,58 @@ the HTTP-based endpoints; RTSP is a different protocol and needs an
 RTSP-aware proxy, not a plain HTTP one), or rely purely on network-level
 restrictions (firewall rules, VLAN isolation, a WireGuard/Tailscale
 tunnel instead of exposing the ports directly).
+
+## ONVIF and UniFi Protect
+
+MakerEye can advertise its existing go2rtc RTSP stream as an ONVIF network
+video transmitter. ONVIF is disabled by default. To enable it, make RTSP
+LAN-reachable and use the same credentials for ONVIF and go2rtc RTSP:
+
+```yaml
+go2rtc:
+  rtsp_listen: 0.0.0.0:8554
+  # The HTTP/WebRTC endpoints can remain on 127.0.0.1:1984.
+  auth:
+    username: protect
+    password: "choose-a-strong-password"
+
+onvif:
+  enabled: true
+  listen: 0.0.0.0:8080
+  advertise_host: ""       # primary LAN IPv4 address; override if needed
+  username: protect
+  password: "choose-a-strong-password"
+  manufacturer: MakerEye Labs
+  model: MakerEye
+```
+
+The ONVIF listener implements WS-Discovery on multicast UDP 3702, device
+and media SOAP services, WS-Security UsernameToken authentication, and one
+H.264 media profile matching `camera.width`, `height`, `framerate`, and
+`bitrate_kbps`. It returns the existing
+`rtsp://<maker-eye>:8554/<stream.name>` URI; video still flows only through
+go2rtc.
+
+In UniFi Protect, enable **Settings → System → Discover Third-Party
+Cameras**, then adopt MakerEye using the configured credentials. Automatic
+discovery normally requires the Pi and Protect console to be on the same
+subnet. If multicast discovery cannot cross the network boundary, use
+Protect's Advanced Adoption flow and enter the Pi's IP address.
+
+Security boundaries are deliberate: only RTSP and the dedicated ONVIF HTTP
+endpoint need LAN listeners. Leave `go2rtc.http_listen` and
+`go2rtc.webrtc_listen` on loopback unless another client needs them. ONVIF
+credentials are stored as plaintext in the protected config file for the
+same reason as RTSP credentials: the daemon must verify the submitted
+secret. The SOAP service accepts WS-Security PasswordDigest/PasswordText
+tokens and HTTP Digest authentication; digest-based modes are preferred.
+
+**Validation status:** protocol generation and authentication are unit
+tested, but discovery, adoption, recording, and reconnect behavior have not
+yet been exercised against a real UniFi Protect console. The first hardware
+test should use the single advertised profile before considering a second
+low-quality stream; adding one would require extra transcoding on the Pi
+Zero 2 W.
 
 ## Prusa Connect uploads
 

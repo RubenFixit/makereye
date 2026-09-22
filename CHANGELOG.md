@@ -8,6 +8,13 @@ SemVer once tagged releases begin.
 
 ### Added
 
+- Optional ONVIF integration for third-party NVRs such as UniFi Protect:
+  native WS-Discovery, device/media SOAP services, WS-Security UsernameToken
+  and HTTP Digest authentication, and one H.264 profile pointing at
+  MakerEye's existing go2rtc RTSP stream. The feature is disabled by default and does not create
+  another camera capture or encode pipeline. Protocol behavior is unit
+  tested; adoption against real Protect hardware remains to be validated.
+
 - Device telemetry over MQTT (`internal/sysinfo`): OS/kernel version,
   CPU usage averaged over the publish interval, memory usage and
   available MB, CPU temperature, root and capture-directory disk

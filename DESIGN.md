@@ -99,6 +99,37 @@ clients (VLC, browser, Prusa Connect uploader in Milestone 2, etc.)
 - rpicam-vid: camera capture only. Never launched or managed by MakerEye
   directly, always a go2rtc-owned child process.
 
+## ONVIF facade
+
+`internal/onvif.Server` is an optional in-process discovery and metadata
+facade around the existing go2rtc RTSP stream. It does not read camera
+frames, proxy RTSP, or create a second encoder. It owns two listeners:
+
+- WS-Discovery multicast on the standard IPv4 endpoint
+  `239.255.255.250:3702`, answering Probe and Resolve requests with a stable
+  device UUID derived from the host machine ID and `device.name`.
+- An HTTP SOAP endpoint implementing the ONVIF device and media operations
+  needed to enumerate one H.264 profile and obtain its RTSP URI.
+
+MakerEye implements this facade rather than exposing go2rtc's built-in
+ONVIF endpoint because go2rtc v1.9.14 does not advertise that endpoint as a
+discoverable ONVIF device, and its ONVIF requests share the HTTP API's Basic
+authentication boundary. MakerEye instead verifies ONVIF WS-Security
+UsernameToken credentials independently while keeping the go2rtc HTTP API
+on loopback.
+
+The ONVIF and go2rtc RTSP credential pairs are required to match. Protect
+uses the credentials entered at adoption when it subsequently opens the
+advertised RTSP URI; allowing different pairs would produce an appliance
+that discovers and authenticates successfully but cannot stream. ONVIF is
+advisory at the daemon level: failure to bind its listener is logged without
+taking down local camera streaming.
+
+Only one media profile is advertised initially. A distinct LQ profile would
+require a derived/transcoded stream and consumes scarce Pi Zero 2 W
+resources, so it is deferred until real Protect validation shows whether it
+is necessary.
+
 ## Prusa Connect uploader
 
 Unlike go2rtc, `internal/prusaconnect.Uploader` is **not a subprocess**,

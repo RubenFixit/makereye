@@ -28,6 +28,11 @@ func cmdValidateConfig(args []string) int {
 	}
 	fmt.Printf("  go2rtc: rtsp=%s webrtc=%s http=%s auth=%s\n",
 		cfg.Go2rtc.RTSPListen, cfg.Go2rtc.WebRTCListen, cfg.Go2rtc.HTTPListen, authState)
+	onvifState := "disabled"
+	if cfg.ONVIF.Enabled {
+		onvifState = fmt.Sprintf("enabled (listen=%s, user=%s)", cfg.ONVIF.Listen, cfg.ONVIF.Username)
+	}
+	fmt.Printf("  onvif: %s\n", onvifState)
 	prusaState := "disabled"
 	if cfg.PrusaConnect.Enabled {
 		prusaState = fmt.Sprintf("enabled (fingerprint=%s, every %ds)",

@@ -5,6 +5,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,6 +23,7 @@ type Config struct {
 	Camera       CameraConfig       `yaml:"camera"`
 	Stream       StreamConfig       `yaml:"stream"`
 	Go2rtc       Go2rtcConfig       `yaml:"go2rtc"`
+	ONVIF        ONVIFConfig        `yaml:"onvif"`
 	PrusaConnect PrusaConnectConfig `yaml:"prusa_connect"`
 	MQTT         MQTTConfig         `yaml:"mqtt"`
 	Lighting     LightingConfig     `yaml:"lighting"`
@@ -118,6 +120,31 @@ type AuthConfig struct {
 	// generates from it) should be handled like any other credential
 	// file; the installer already restricts both to 0640 makereye:makereye.
 	Password string `yaml:"password"`
+}
+
+// ONVIFConfig exposes MakerEye as an ONVIF network video transmitter.
+// ONVIF is only a discovery and metadata facade: clients receive the RTSP
+// URI served by go2rtc, so no second process reads or encodes camera frames.
+type ONVIFConfig struct {
+	Enabled bool `yaml:"enabled"`
+
+	// Listen is the HTTP SOAP service address. WS-Discovery always uses the
+	// standard UDP multicast endpoint 239.255.255.250:3702.
+	Listen string `yaml:"listen"`
+
+	// AdvertiseHost overrides the host placed in discovery, service, RTSP,
+	// and snapshot URLs. Empty selects the primary LAN address.
+	AdvertiseHost string `yaml:"advertise_host"`
+
+	// Username and Password authenticate ONVIF SOAP requests using a
+	// WS-Security UsernameToken. They are deliberately independent from the
+	// go2rtc HTTP/RTSP credentials because ONVIF clients don't normally send
+	// HTTP Basic credentials to the SOAP endpoint.
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+
+	Manufacturer string `yaml:"manufacturer"`
+	Model        string `yaml:"model"`
 }
 
 // SystemConfig controls general daemon behavior.
@@ -328,6 +355,12 @@ func Default() *Config {
 			WebRTCListen: "127.0.0.1:1984",
 			HTTPListen:   "127.0.0.1:1984",
 		},
+		ONVIF: ONVIFConfig{
+			Enabled:      false,
+			Listen:       "0.0.0.0:8080",
+			Manufacturer: "MakerEye Labs",
+			Model:        "MakerEye",
+		},
 		PrusaConnect: PrusaConnectConfig{
 			Enabled:         false,
 			IntervalSeconds: 10,
@@ -427,6 +460,18 @@ func (c *Config) Validate() error {
 	check((c.Go2rtc.Auth.Username == "") != (c.Go2rtc.Auth.Password == ""),
 		"go2rtc.auth.username and go2rtc.auth.password must both be set or both left empty")
 
+	if c.ONVIF.Enabled {
+		check(strings.TrimSpace(c.ONVIF.Listen) == "", "onvif.listen must not be empty when enabled")
+		check(strings.TrimSpace(c.ONVIF.Username) == "", "onvif.username must not be empty when enabled")
+		check(strings.TrimSpace(c.ONVIF.Password) == "", "onvif.password must not be empty when enabled")
+		check(strings.TrimSpace(c.ONVIF.Manufacturer) == "", "onvif.manufacturer must not be empty when enabled")
+		check(strings.TrimSpace(c.ONVIF.Model) == "", "onvif.model must not be empty when enabled")
+		check(isLoopbackListen(c.ONVIF.Listen), "onvif.listen must be LAN-reachable when enabled, got %q", c.ONVIF.Listen)
+		check(isLoopbackListen(c.Go2rtc.RTSPListen), "go2rtc.rtsp_listen must be LAN-reachable when onvif is enabled, got %q", c.Go2rtc.RTSPListen)
+		check(c.Go2rtc.Auth.Username != c.ONVIF.Username || c.Go2rtc.Auth.Password != c.ONVIF.Password,
+			"go2rtc.auth must match onvif credentials when onvif is enabled so Protect can authenticate to RTSP")
+	}
+
 	if c.PrusaConnect.Enabled {
 		check(strings.TrimSpace(c.PrusaConnect.Token) == "", "prusa_connect.token must not be empty when enabled")
 		check(len(c.PrusaConnect.Fingerprint) < 16,
@@ -510,4 +555,13 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("invalid configuration:\n  - %s", strings.Join(errs, "\n  - "))
 	}
 	return nil
+}
+
+func isLoopbackListen(listen string) bool {
+	host, _, err := net.SplitHostPort(listen)
+	if err != nil {
+		return false // the owning field's normal validation reports malformed values
+	}
+	ip := net.ParseIP(host)
+	return strings.EqualFold(host, "localhost") || ip != nil && ip.IsLoopback()
 }

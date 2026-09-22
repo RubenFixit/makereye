@@ -21,6 +21,7 @@ import (
 	"github.com/MakerEyeLabs/makereye/internal/ipc"
 	"github.com/MakerEyeLabs/makereye/internal/lighting"
 	"github.com/MakerEyeLabs/makereye/internal/mqtt"
+	"github.com/MakerEyeLabs/makereye/internal/onvif"
 	"github.com/MakerEyeLabs/makereye/internal/prusaconnect"
 	"github.com/MakerEyeLabs/makereye/internal/snapshot"
 	"github.com/MakerEyeLabs/makereye/internal/sysinfo"
@@ -38,6 +39,7 @@ type Daemon struct {
 	lights     *lighting.Manager
 	lapse      *timelapse.Manager
 	bridge     *mqtt.Bridge
+	onvif      *onvif.Server
 	sys        *sysinfo.Collector
 }
 
@@ -54,6 +56,7 @@ func New(cfg *config.Config, logger *slog.Logger) *Daemon {
 		uploader:   prusaconnect.NewUploader(cfg, source, logger),
 		lights:     lighting.NewManager(cfg, logger),
 		sys:        sysinfo.New(),
+		onvif:      onvif.NewServer(cfg, logger),
 	}
 	d.lapse = timelapse.NewManager(cfg, source, timelapse.LightHooks{
 		States: d.lights.States,
@@ -232,6 +235,14 @@ func (d *Daemon) Run(ctx context.Context) error {
 		}
 	}
 
+	if d.cfg.ONVIF.Enabled {
+		if err := d.onvif.Start(ctx); err != nil {
+			// Advisory subsystem: local streaming remains useful even when
+			// discovery or the ONVIF HTTP listener cannot start.
+			d.logger.Error("starting ONVIF", "error", err)
+		}
+	}
+
 	if d.cfg.Lighting.Enabled {
 		if err := d.lights.Start(ctx); err != nil {
 			// Advisory subsystem: log and continue.
@@ -280,6 +291,9 @@ func (d *Daemon) Run(ctx context.Context) error {
 	}
 	if err := d.uploader.Stop(stopCtx); err != nil {
 		d.logger.Error("error stopping prusa connect uploader", "error", err)
+	}
+	if err := d.onvif.Stop(stopCtx); err != nil {
+		d.logger.Error("error stopping ONVIF", "error", err)
 	}
 	if err := d.bridge.Stop(stopCtx); err != nil {
 		d.logger.Error("error stopping mqtt bridge", "error", err)
@@ -470,6 +484,12 @@ func (d *Daemon) handleStatus() ipc.Response {
 		msg += fmt.Sprintf("\nmqtt: %s broker=%s", mqttState, d.cfg.MQTT.BrokerURL)
 	} else {
 		msg += "\nmqtt: disabled"
+	}
+
+	if d.cfg.ONVIF.Enabled {
+		msg += fmt.Sprintf("\nonvif: enabled service=%s", d.onvif.ServiceURL())
+	} else {
+		msg += "\nonvif: disabled"
 	}
 
 	if d.cfg.Lighting.Enabled {

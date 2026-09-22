@@ -30,6 +30,21 @@ func TestValidateCatchesBadValues(t *testing.T) {
 		{"empty go2rtc binary", func(c *Config) { c.Go2rtc.BinaryPath = "" }, "go2rtc.binary_path"},
 		{"auth username without password", func(c *Config) { c.Go2rtc.Auth.Username = "admin" }, "go2rtc.auth"},
 		{"auth password without username", func(c *Config) { c.Go2rtc.Auth.Password = "hunter2" }, "go2rtc.auth"},
+		{"onvif enabled without credentials", func(c *Config) {
+			c.ONVIF.Enabled = true
+			c.Go2rtc.RTSPListen = "0.0.0.0:8554"
+		}, "onvif.username"},
+		{"onvif loopback RTSP", func(c *Config) {
+			c.ONVIF.Enabled = true
+			c.ONVIF.Username, c.ONVIF.Password = "protect", "secret"
+			c.Go2rtc.Auth.Username, c.Go2rtc.Auth.Password = "protect", "secret"
+		}, "go2rtc.rtsp_listen"},
+		{"onvif credentials differ from RTSP", func(c *Config) {
+			c.ONVIF.Enabled = true
+			c.ONVIF.Username, c.ONVIF.Password = "protect", "secret"
+			c.Go2rtc.Auth.Username, c.Go2rtc.Auth.Password = "other", "password"
+			c.Go2rtc.RTSPListen = "0.0.0.0:8554"
+		}, "must match onvif credentials"},
 		{"prusa enabled without token", func(c *Config) {
 			c.PrusaConnect.Enabled = true
 			c.PrusaConnect.Fingerprint = "at-least-16-characters"
@@ -113,6 +128,17 @@ func TestValidateCatchesBadValues(t *testing.T) {
 				t.Fatalf("expected error containing %q, got: %v", tc.wantErr, err)
 			}
 		})
+	}
+}
+
+func TestONVIFValidWhenLANReachableAndCredentialsMatch(t *testing.T) {
+	cfg := Default()
+	cfg.ONVIF.Enabled = true
+	cfg.ONVIF.Username, cfg.ONVIF.Password = "protect", "secret"
+	cfg.Go2rtc.Auth.Username, cfg.Go2rtc.Auth.Password = "protect", "secret"
+	cfg.Go2rtc.RTSPListen = "0.0.0.0:8554"
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("expected valid ONVIF config, got error: %v", err)
 	}
 }
 

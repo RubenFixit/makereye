@@ -354,6 +354,16 @@ editing `config.yaml`.
 
 ## Candidate work, not yet scheduled
 
+- **ONVIF / UniFi Protect compatibility — IMPLEMENTED, HARDWARE VALIDATION
+  PENDING**: native `internal/onvif` WS-Discovery plus authenticated device
+  and media SOAP services advertise the existing go2rtc RTSP stream as one
+  H.264 profile. Unit tests cover discovery responses, WS-Security digest,
+  endpoint generation, and configuration guardrails. Still required on a
+  real Protect console: automatic discovery, credentialed adoption,
+  continuous recording, reconnect after restart, and confirmation that a
+  single profile is acceptable for both HQ/LQ selection. Do not add an LQ
+  transcode until that test demonstrates a need.
+
 - **Update over MQTT/Home Assistant** (single-command update exists
   today: `scripts/update.sh` pulls/rebuilds/reinstalls/restarts). The
   full no-SSH version has a clean design but real moving parts, so it's
